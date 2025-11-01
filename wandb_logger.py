@@ -66,14 +66,28 @@ class WandBLogger:
             class_names: List of class names
         """
         if self.enabled:
-            wandb.log({
-                "confusion_matrix": wandb.plot.confusion_matrix(
-                    probs=None,
-                    y_true=y_true,
-                    preds=y_pred,
-                    class_names=class_names
-                )
-            })
+            try:
+                # Try newer WandB API first (v0.13.0+)
+                wandb.log({
+                    "confusion_matrix": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=y_true,
+                        preds=y_pred,
+                        class_names=class_names
+                    )
+                })
+            except (TypeError, AttributeError):
+                # Fallback for older WandB versions or API changes
+                # Create a simple table instead
+                try:
+                    from sklearn.metrics import confusion_matrix as sklearn_cm
+                    cm = sklearn_cm(y_true, y_pred)
+                    wandb.log({"confusion_matrix_data": wandb.Table(
+                        data=cm.tolist(),
+                        columns=class_names if class_names else [f"Class {i}" for i in range(cm.shape[1])]
+                    )})
+                except Exception as e:
+                    print(f"Warning: Could not log confusion matrix to WandB: {e}")
     
     def log_image(self, name: str, image_path: str) -> None:
         """
