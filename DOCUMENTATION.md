@@ -231,9 +231,61 @@ Compute precision, recall, F1 score.
 
 **Returns:** Dictionary with 'accuracy', 'precision', 'recall', 'f1', etc.
 
+### CIFAR-10 Loader
+
+#### load_cifar10_data()
+```python
+from cifar10_loader import load_cifar10_data, get_cifar10_class_names
+
+load_cifar10_data(use_subset: bool = False) -> Tuple
+```
+
+Load CIFAR-10 dataset with automatic fallback to synthetic data if download fails.
+
+**Parameters:**
+- `use_subset`: If True, uses smaller subset for quick testing (5000 train, 1000 test)
+
+**Returns:** `((X_train, y_train), (X_test, y_test))` with images flattened to 3072 features
+
 ## Usage Examples
 
-### Example 1: Basic Classification
+### Example 1: Training on CIFAR-10
+
+```python
+import numpy as np
+from neural_network import NeuralNetwork
+from utils import one_hot_encode, normalize_data
+from cifar10_loader import load_cifar10_data, get_cifar10_class_names
+
+# Load CIFAR-10
+(X_train, y_train), (X_test, y_test) = load_cifar10_data()
+
+# Normalize
+X_train_norm, X_test_norm, _, _ = normalize_data(X_train, X_test)
+y_train_onehot = one_hot_encode(y_train, num_classes=10)
+
+# Create model for CIFAR-10 (3072 input features)
+model = NeuralNetwork(
+    layer_sizes=[3072, 512, 256, 10],
+    activations=['relu', 'relu', 'softmax'],
+    learning_rate=0.001,
+    l2_lambda=0.0001
+)
+
+# Train
+history = model.train(
+    X_train=X_train_norm,
+    y_train=y_train_onehot,
+    epochs=50,
+    batch_size=128
+)
+
+# Evaluate
+predictions = model.predict(X_test_norm)
+class_names = get_cifar10_class_names()
+```
+
+### Example 2: Basic Classification
 
 ```python
 import numpy as np
@@ -268,7 +320,7 @@ history = model.train(
 predictions = model.predict(X_test_norm)
 ```
 
-### Example 2: With Validation Set
+### Example 3: With Validation Set
 
 ```python
 # Train with validation

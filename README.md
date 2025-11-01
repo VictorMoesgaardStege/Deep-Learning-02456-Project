@@ -1,6 +1,6 @@
 # Neural Network from Scratch with NumPy
 
-A complete implementation of a feedforward neural network from scratch using only NumPy, featuring training, optimization, and experiment tracking with Weights & Biases (WandB).
+A complete implementation of a feedforward neural network from scratch using only NumPy, featuring training, optimization, and experiment tracking with Weights & Biases (WandB). Trained and tested on the CIFAR-10 dataset.
 
 ## 🎯 Objective
 
@@ -22,6 +22,7 @@ Design and train a feedforward neural network (FFN) from scratch using only NumP
 - One-hot encoding for classification
 - Comprehensive visualization tools
 - WandB integration for experiment tracking
+- **CIFAR-10 Dataset Support**: Train on real-world 32x32 RGB images
 
 ## 📁 Project Structure
 
@@ -30,7 +31,7 @@ Design and train a feedforward neural network (FFN) from scratch using only NumP
 ├── neural_network.py    # Core neural network implementation
 ├── utils.py            # Evaluation and visualization utilities
 ├── wandb_logger.py     # WandB integration for experiment tracking
-├── example.py          # Complete training example
+├── example.py          # Complete training example on CIFAR-10
 ├── requirements.txt    # Python dependencies
 └── README.md          # This file
 ```
@@ -52,18 +53,21 @@ pip install -r requirements.txt
 
 ### Running the Example
 
-Run the complete training example on the digits dataset:
+Run the complete training example on the CIFAR-10 dataset:
 
 ```bash
 python example.py
 ```
 
 This will:
-- Load and preprocess the digits dataset
+- Load and preprocess the CIFAR-10 dataset (50,000 training images, 10,000 test images)
 - Train a neural network with 2 hidden layers
 - Evaluate on a test set
 - Generate loss/accuracy curves and confusion matrix
 - Log everything to WandB (if enabled)
+
+The CIFAR-10 dataset contains 60,000 32x32 color images in 10 classes:
+- airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck
 
 ## 📖 Usage
 
@@ -193,12 +197,18 @@ L_reg = λ/(2m) Σ ||W[l]||²
 
 The example script trains on the digits dataset (8x8 images of handwritten digits) and typically achieves:
 - Training Accuracy: ~99%
-- Test Accuracy: ~97%
+## 📊 Example Results
+
+The example script trains on the CIFAR-10 dataset (32x32 RGB images, 10 classes) and typically achieves:
+- Training Accuracy: ~50-60% (with basic architecture, can be improved with deeper networks)
+- Test Accuracy: ~45-55%
+
+Note: CIFAR-10 is a more challenging dataset than digits. Expected accuracy for a simple feedforward network from scratch is around 45-55%. For comparison, CNNs can achieve 90%+ accuracy on this dataset.
 
 Results include:
 - Training and validation loss curves
 - Training and validation accuracy curves
-- Confusion matrix showing per-class performance
+- Confusion matrix showing per-class performance (10 classes: airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck)
 - Precision, recall, and F1 scores
 
 ## 🛠️ Implementation Details
@@ -219,12 +229,20 @@ The `NeuralNetwork` class supports:
 3. **Training Loop**: Mini-batch SGD with shuffling and validation
 4. **Evaluation**: Accuracy, confusion matrix, and detailed metrics
 
+### CIFAR-10 Dataset
+
+- **Training samples**: 50,000 (32x32 RGB images)
+- **Test samples**: 10,000
+- **Input features**: 3,072 (32 × 32 × 3 flattened)
+- **Classes**: 10 (airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck)
+
 ## 📝 Requirements
 
 - Python 3.7+
 - NumPy >= 1.21.0
 - matplotlib >= 3.5.0
 - scikit-learn >= 1.0.0
+- keras >= 2.12.0 (for loading CIFAR-10 dataset)
 - wandb >= 0.13.0 (optional, for experiment tracking)
 
 ## 🤝 Contributing

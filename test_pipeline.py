@@ -1,10 +1,8 @@
 """
-Quick test of the complete example pipeline (without WandB)
+Quick test of the complete example pipeline on CIFAR-10 (without WandB)
 """
 
 import numpy as np
-from sklearn.datasets import load_digits
-from sklearn.model_selection import train_test_split
 
 from neural_network import NeuralNetwork
 from utils import (
@@ -14,27 +12,24 @@ from utils import (
     compute_metrics,
 )
 from wandb_logger import create_model_summary
+from cifar10_loader import load_cifar10_data
 
 
 def main():
-    print("Quick Test of Neural Network Pipeline")
+    print("Quick Test of Neural Network Pipeline on CIFAR-10")
     print("=" * 60)
     
     # Set seed
     np.random.seed(42)
     
     # Load data
-    print("\n[1/5] Loading dataset...")
-    digits = load_digits()
-    X, y = digits.data, digits.target
-    num_classes = len(np.unique(y))
+    print("\n[1/5] Loading CIFAR-10 dataset...")
+    (X_train, y_train), (X_test, y_test) = load_cifar10_data(use_subset=True)
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    num_classes = 10
     
     print(f"Train: {X_train.shape[0]} samples, Test: {X_test.shape[0]} samples")
+    print(f"Features: {X_train.shape[1]} (32x32x3 flattened)")
     
     # Normalize
     print("\n[2/5] Normalizing data...")
@@ -44,14 +39,14 @@ def main():
     
     # Create model
     print("\n[3/5] Creating neural network...")
-    layer_sizes = [X_train.shape[1], 64, 32, num_classes]
+    layer_sizes = [X_train.shape[1], 256, 128, num_classes]
     activations = ['relu', 'relu', 'softmax']
     
     model = NeuralNetwork(
         layer_sizes=layer_sizes,
         activations=activations,
-        learning_rate=0.05,
-        l2_lambda=0.001,
+        learning_rate=0.001,
+        l2_lambda=0.0001,
         seed=42
     )
     
@@ -63,7 +58,7 @@ def main():
         X_train=X_train_norm,
         y_train=y_train_onehot,
         epochs=20,
-        batch_size=32,
+        batch_size=128,
         loss_type='cross_entropy',
         verbose=False
     )

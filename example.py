@@ -1,5 +1,5 @@
 """
-Example: Training a Neural Network from Scratch on MNIST-like Dataset
+Example: Training a Neural Network from Scratch on CIFAR-10 Dataset
 This script demonstrates all features:
 - Forward pass with matrix multiplications and activations
 - Loss computation (Cross-Entropy) with L2 regularization
@@ -10,7 +10,6 @@ This script demonstrates all features:
 """
 
 import numpy as np
-from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 
 from neural_network import NeuralNetwork
@@ -23,13 +22,14 @@ from utils import (
     plot_training_history
 )
 from wandb_logger import WandBLogger, create_model_summary
+from cifar10_loader import load_cifar10_data, get_cifar10_class_names
 
 
 def main():
     """Main function to demonstrate the neural network"""
     
     print("=" * 70)
-    print("Neural Network from Scratch - Training Example")
+    print("Neural Network from Scratch - Training on CIFAR-10")
     print("=" * 70)
     
     # Set random seed for reproducibility
@@ -38,21 +38,20 @@ def main():
     # ========================================
     # 1. Load and Prepare Data
     # ========================================
-    print("\n[1/7] Loading dataset...")
+    print("\n[1/7] Loading CIFAR-10 dataset...")
     
-    # Load the digits dataset (similar to MNIST but smaller)
-    digits = load_digits()
-    X, y = digits.data, digits.target
-    num_classes = len(np.unique(y))
+    # Load CIFAR-10 dataset (will use synthetic data if download fails)
+    (X_train_full, y_train_full), (X_test, y_test) = load_cifar10_data(use_subset=False)
     
-    print(f"Dataset: {X.shape[0]} samples, {X.shape[1]} features, {num_classes} classes")
+    num_classes = 10
     
-    # Split into train, validation, and test sets
-    X_temp, X_test, y_temp, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    print(f"Dataset: {X_train_full.shape[0]} training samples, {X_test.shape[0]} test samples")
+    print(f"Features: {X_train_full.shape[1]} (32x32x3 RGB images flattened)")
+    print(f"Classes: {num_classes} (airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck)")
+    
+    # Split training data into train and validation sets
     X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=0.2, random_state=42, stratify=y_temp
+        X_train_full, y_train_full, test_size=0.1, random_state=42, stratify=y_train_full
     )
     
     print(f"Train set: {X_train.shape[0]} samples")
@@ -80,18 +79,20 @@ def main():
     print("\n[3/7] Creating neural network...")
     
     # Network architecture: Input -> Hidden1 -> Hidden2 -> Output
-    layer_sizes = [X_train.shape[1], 128, 64, num_classes]
+    # CIFAR-10 has 3072 input features (32x32x3)
+    layer_sizes = [X_train.shape[1], 512, 256, num_classes]
     activations = ['relu', 'relu', 'softmax']
     
     # Hyperparameters
     config = {
         'layer_sizes': layer_sizes,
         'activations': activations,
-        'learning_rate': 0.01,
-        'l2_lambda': 0.001,
-        'epochs': 100,
-        'batch_size': 32,
-        'seed': 42
+        'learning_rate': 0.001,
+        'l2_lambda': 0.0001,
+        'epochs': 50,
+        'batch_size': 128,
+        'seed': 42,
+        'dataset': 'CIFAR-10'
     }
     
     # Create model
@@ -114,7 +115,7 @@ def main():
     
     # Initialize WandB (set enabled=False to disable)
     wandb_logger = WandBLogger(
-        project_name="neural-network-from-scratch",
+        project_name="neural-network-cifar10",
         config=config,
         enabled=True  # Set to False if you don't want to use WandB
     )
@@ -194,7 +195,7 @@ def main():
     wandb_logger.log_image('training_history', 'training_history.png')
     
     # Plot confusion matrix
-    class_names = [f"Digit {i}" for i in range(num_classes)]
+    class_names = get_cifar10_class_names()
     plot_confusion_matrix(confusion, class_names=class_names, save_path='confusion_matrix.png')
     wandb_logger.log_image('confusion_matrix', 'confusion_matrix.png')
     
