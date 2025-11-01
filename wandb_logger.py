@@ -67,7 +67,7 @@ class WandBLogger:
         """
         if self.enabled:
             try:
-                # Try newer WandB API first (v0.13.0+)
+                # WandB v0.13.0+ API (as specified in requirements.txt)
                 wandb.log({
                     "confusion_matrix": wandb.plot.confusion_matrix(
                         probs=None,
@@ -77,8 +77,8 @@ class WandBLogger:
                     )
                 })
             except (TypeError, AttributeError):
-                # Fallback for older WandB versions or API changes
-                # Create a simple table instead
+                # Fallback for API changes in future WandB versions
+                # Note: scikit-learn is required (listed in requirements.txt)
                 try:
                     from sklearn.metrics import confusion_matrix as sklearn_cm
                     cm = sklearn_cm(y_true, y_pred)

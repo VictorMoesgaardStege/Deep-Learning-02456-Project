@@ -154,7 +154,8 @@ def normalize_data(X_train: np.ndarray,
     mean = np.mean(X_train, axis=0)
     std = np.std(X_train, axis=0)
     
-    # Avoid division by zero
+    # Avoid division by zero for features with zero variance
+    # Set std to 1 for constant features (no normalization needed)
     std[std == 0] = 1
     
     X_train_normalized = (X_train - mean) / std

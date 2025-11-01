@@ -10,6 +10,10 @@ This module implements a feedforward neural network with:
 import numpy as np
 from typing import List, Tuple, Optional, Callable
 
+# Constants for numerical stability
+EPSILON_CLIP = 1e-10  # Small value to prevent log(0) and division by zero
+MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
+
 
 class ActivationFunction:
     """Base class for activation functions with forward and backward methods"""
@@ -90,7 +94,8 @@ class Layer:
             output_size: Number of output neurons
             activation: Activation function to use
         """
-        # He initialization for weights
+        # He initialization for weights: W ~ N(0, sqrt(2/fan_in))
+        # This initialization works well with ReLU activations
         self.weights = np.random.randn(input_size, output_size) * np.sqrt(2.0 / input_size)
         self.biases = np.zeros((1, output_size))
         self.activation = activation
@@ -247,7 +252,7 @@ class NeuralNetwork:
         elif loss_type == 'cross_entropy':
             # Cross-Entropy Loss
             # Clip predictions to prevent log(0)
-            y_pred_clipped = np.clip(y_pred, 1e-10, 1 - 1e-10)
+            y_pred_clipped = np.clip(y_pred, EPSILON_CLIP, MAX_CLIP)
             data_loss = -np.mean(np.sum(y_true * np.log(y_pred_clipped), axis=1))
         else:
             raise ValueError(f"Unknown loss type: {loss_type}")
