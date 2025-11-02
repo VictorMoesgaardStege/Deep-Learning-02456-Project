@@ -97,22 +97,22 @@ class Layer:
             output_size: Number of output neurons
             activation: Activation function to use
         """
-        # He initialization for weights: W ~ N(0, sqrt(2/fan_in))
-        # This initialization works well with ReLU activations
+        # He normal initialization for weights: W ~ N(0, sqrt(2/input size)) 
+        # This initialization works well with ReLU activations (https://www.geeksforgeeks.org/machine-learning/weight-initialization-techniques-for-deep-neural-networks/)
         self.weights = np.random.randn(input_size, output_size) * np.sqrt(2.0 / input_size)
         self.biases = np.zeros((1, output_size))
         self.activation = activation
         
-        # Cache for backward pass
+        # Cache for backward pass (memory trick for storing intermediate calculation values)
         self.input = None
         self.z = None  # Pre-activation
         self.a = None  # Post-activation
         
-        # Gradients
+        # Gradients - the parameters to be updated during training
         self.dweights = None
         self.dbiases = None
     
-    def forward(self, x: np.ndarray) -> np.ndarray:
+    def forward(self, x):
         """
         Forward pass through the layer
         
@@ -127,26 +127,26 @@ class Layer:
         self.a = self.activation.forward(self.z)
         return self.a
     
-    def backward(self, da: np.ndarray) -> np.ndarray:
+    def backward(self, da):
         """
         Backward pass through the layer
         
         Args:
-            da: Gradient of loss with respect to layer output
+            da: Gradient of loss with respect to layer output (meaning the activated output from given layer)
             
         Returns:
             Gradient of loss with respect to layer input
         """
-        # Gradient through activation
-        dz = da * self.activation.backward(self.z)
+        # Gradient through activation 
+        dz = da * self.activation.backward(self.z) # actually dL/dz = dL/da * da/dz
         
         # Gradient with respect to weights and biases
         batch_size = self.input.shape[0]
         self.dweights = np.dot(self.input.T, dz) / batch_size
-        self.dbiases = np.sum(dz, axis=0, keepdims=True) / batch_size
+        self.dbiases = np.sum(dz, axis=0, keepdims=True) / batch_size # average of dz (batch_size,output_size) over batch
         
         # Gradient with respect to input
-        dx = np.dot(dz, self.weights.T)
+        dx = np.dot(dz, self.weights.T) # dL/dx = dL/dz * dz/dx (because dz/dx = W.T)
         
         return dx
 
