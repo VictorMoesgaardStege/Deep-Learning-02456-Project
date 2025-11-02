@@ -17,39 +17,42 @@ MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
 
 class ActivationFunction:
     """Base class for activation functions with forward and backward methods"""
+    # If activation is not specified, raise error
     
     @staticmethod
-    def forward(x: np.ndarray) -> np.ndarray:
+    def forward(x):
         raise NotImplementedError
     
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
+    def backward(x):
         raise NotImplementedError
 
 
 class ReLU(ActivationFunction):
-    """ReLU activation function"""
-    
+    """ReLU activation function""" 
+
+    #ReuLU activation function for forward
     @staticmethod
-    def forward(x: np.ndarray) -> np.ndarray:
+    def forward(x):
         return np.maximum(0, x)
     
+    #ReuLU activation function for backward pass (derivative of relu)
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
-        return (x > 0).astype(float)
+    def backward(x):
+        return (x > 0).astype(float) # Derivative is 1 for x>0, else 0 (this is a logical test)
 
 
 class Sigmoid(ActivationFunction):
     """Sigmoid activation function"""
     
     @staticmethod
-    def forward(x: np.ndarray) -> np.ndarray:
-        # Clip to prevent overflow
+    def forward(x):
+        # Clip to prevent overflow (every value is squashed between -500 and 500)
         x_clipped = np.clip(x, -500, 500)
         return 1 / (1 + np.exp(-x_clipped))
     
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
+    def backward(x):
         s = Sigmoid.forward(x)
         return s * (1 - s)
 
@@ -58,11 +61,11 @@ class Tanh(ActivationFunction):
     """Tanh activation function"""
     
     @staticmethod
-    def forward(x: np.ndarray) -> np.ndarray:
+    def forward(x):
         return np.tanh(x)
     
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
+    def backward(x):
         return 1 - np.tanh(x) ** 2
 
 
@@ -70,16 +73,16 @@ class Softmax(ActivationFunction):
     """Softmax activation function for multi-class classification"""
     
     @staticmethod
-    def forward(x: np.ndarray) -> np.ndarray:
-        # Subtract max for numerical stability
+    def forward(x):
+        # Subtract max for numerical stability - it makes no difference to the result if we subtract a constant from all inputs. Avoids large exponents problems.
         exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
         return exp_x / np.sum(exp_x, axis=1, keepdims=True)
     
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
-        # For softmax with cross-entropy, the gradient is computed together
-        # This is a placeholder
-        return np.ones_like(x)
+    def backward(x):
+        # Jacobian matrix of softmax
+        soft = Softmax.forward(x).reshape(-1, 1)
+        return np.diagflat(soft) - np.dot(soft, soft.T)
 
 
 class Layer:
