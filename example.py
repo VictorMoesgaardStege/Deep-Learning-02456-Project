@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from neural_network import NeuralNetwork
-from utils import (
+from helper_functions import (
     one_hot_encode, 
     normalize_data, 
     compute_confusion_matrix,

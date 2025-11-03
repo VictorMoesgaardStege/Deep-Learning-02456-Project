@@ -151,7 +151,7 @@ def test_gradient_numerical():
 def test_training():
     """Test training loop"""
     from neural_network import NeuralNetwork
-    from utils import one_hot_encode
+    from helper_functions import one_hot_encode
     
     print("Testing Training Loop...")
     
@@ -190,7 +190,7 @@ def test_training():
 
 def test_utils():
     """Test utility functions"""
-    from utils import (
+    from helper_functions import (
         one_hot_encode, 
         normalize_data, 
         compute_confusion_matrix,
