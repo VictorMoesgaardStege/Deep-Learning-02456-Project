@@ -208,3 +208,36 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) ->
         'avg_recall': np.mean(recall),
         'avg_f1': np.mean(f1)
     }
+
+def create_model_summary(layer_sizes: list, activations: list) -> str:
+    """
+    Create a summary of the model architecture
+    
+    Args:
+        layer_sizes: List of layer sizes
+        activations: List of activation functions
+        
+    Returns:
+        String summary of the model
+    """
+    summary = "Neural Network Architecture:\n"
+    summary += "=" * 50 + "\n"
+    
+    total_params = 0
+    
+    for i in range(len(layer_sizes) - 1):
+        input_size = layer_sizes[i]
+        output_size = layer_sizes[i + 1]
+        activation = activations[i] if i < len(activations) else "none"
+        
+        # Calculate parameters (weights + biases)
+        layer_params = input_size * output_size + output_size
+        total_params += layer_params
+        
+        summary += f"Layer {i + 1}: {input_size} -> {output_size} ({activation})\n"
+        summary += f"  Parameters: {layer_params:,}\n"
+    
+    summary += "=" * 50 + "\n"
+    summary += f"Total Parameters: {total_params:,}\n"
+    
+    return summary

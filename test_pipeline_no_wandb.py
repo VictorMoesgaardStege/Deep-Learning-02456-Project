@@ -5,13 +5,13 @@ Quick test of the complete example pipeline on CIFAR-10 (without WandB)
 import numpy as np
 
 from neural_network import NeuralNetwork
-from utils import (
+from helper_functions import (
     one_hot_encode, 
     normalize_data, 
     compute_confusion_matrix,
     compute_metrics,
+    create_model_summary
 )
-# from wandb_logger import create_model_summary
 from cifar10_loader import load_cifar10_data
 
 
