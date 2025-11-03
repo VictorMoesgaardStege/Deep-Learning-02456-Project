@@ -10,10 +10,6 @@ This module implements a feedforward neural network with:
 import numpy as np
 from typing import List, Tuple, Optional, Callable
 
-# Constants for numerical stability
-EPSILON_CLIP = 1e-10  # Small value to prevent log(0) and division by zero
-MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
-
 
 class ActivationFunction:
     """Base class for activation functions with forward and backward methods"""
@@ -78,11 +74,11 @@ class Softmax(ActivationFunction):
         exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
         return exp_x / np.sum(exp_x, axis=1, keepdims=True)
     
-    @staticmethod
-    def backward(x):
-        # Jacobian matrix of softmax
-        soft = Softmax.forward(x).reshape(-1, 1)
-        return np.diagflat(soft) - np.dot(soft, soft.T)
+    # @staticmethod
+    # def backward(x):
+    #     # Jacobian matrix of softmax
+    #     soft = Softmax.forward(x).reshape(-1, 1)
+    #     return np.diagflat(soft) - np.dot(soft, soft.T)
 
 
 class Layer:
@@ -180,9 +176,9 @@ class NeuralNetwork:
         self.l2_lambda = l2_lambda
         self.layers = []
         
-        # Default activations: ReLU for hidden layers, Softmax for output
-        if activations is None:
-            activations = ['relu'] * (len(layer_sizes) - 2) + ['softmax']
+        # # Default activations: ReLU for hidden layers, Softmax for output
+        # if activations is None:
+        #     activations = ['relu'] * (len(layer_sizes) - 2) + ['softmax']
         
         # Map activation names to classes
         activation_map = {
@@ -205,7 +201,7 @@ class NeuralNetwork:
         self.val_loss_history = []
         self.val_acc_history = []
     
-    def forward(self, x: np.ndarray) -> np.ndarray:
+    def forward(self, x):
         """
         Forward pass through the entire network
         
@@ -219,7 +215,7 @@ class NeuralNetwork:
             x = layer.forward(x)
         return x
     
-    def backward(self, y_pred: np.ndarray, y_true: np.ndarray) -> None:
+    def backward(self, y_pred, y_true):
         """
         Backward pass through the entire network
         
@@ -235,18 +231,22 @@ class NeuralNetwork:
         for layer in reversed(self.layers):
             da = layer.backward(da)
     
-    def compute_loss(self, y_pred: np.ndarray, y_true: np.ndarray, loss_type: str = 'cross_entropy') -> float:
+    def compute_loss(self, y_pred, y_true, loss_type: str = 'cross_entropy'):
         """
         Compute loss with L2 regularization
         
         Args:
             y_pred: Predicted values
             y_true: True values
-            loss_type: Type of loss ('mse' or 'cross_entropy')
+            loss_type: Type of loss ('mse' or 'cross_entropy') - maybe implement mse later
             
         Returns:
             Loss value
         """
+        # Constants for numerical stability
+        EPSILON_CLIP = 1e-10  # Small value to prevent log(0) and division by zero
+        MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
+
         batch_size = y_true.shape[0]
         
         if loss_type == 'mse':
@@ -256,7 +256,7 @@ class NeuralNetwork:
             # Cross-Entropy Loss
             # Clip predictions to prevent log(0)
             y_pred_clipped = np.clip(y_pred, EPSILON_CLIP, MAX_CLIP)
-            data_loss = -np.mean(np.sum(y_true * np.log(y_pred_clipped), axis=1))
+            data_loss = -np.mean(np.sum(y_true * np.log(y_pred_clipped), axis=1)) # negative log likelihood
         else:
             raise ValueError(f"Unknown loss type: {loss_type}")
         
@@ -269,26 +269,26 @@ class NeuralNetwork:
         
         return data_loss + l2_loss
     
-    def update_weights(self) -> None:
+    def update_weights(self):
         """Update weights and biases using gradients"""
         for layer in self.layers:
             # Add L2 regularization gradient to weight gradients
             if self.l2_lambda > 0:
-                layer.dweights += self.l2_lambda * layer.weights
+                layer.dweights += self.l2_lambda * layer.weights # 1/m is already included in layer.dweights
             
             # Update weights and biases
             layer.weights -= self.learning_rate * layer.dweights
             layer.biases -= self.learning_rate * layer.dbiases
     
     def train(self, 
-              X_train: np.ndarray,
-              y_train: np.ndarray,
-              X_val: Optional[np.ndarray] = None,
-              y_val: Optional[np.ndarray] = None,
-              epochs: int = 100,
-              batch_size: int = 32,
+              X_train,
+              y_train,
+              X_val = None,
+              y_val = None,
+              epochs = 100,
+              batch_size = 32,
               loss_type: str = 'cross_entropy',
-              verbose: bool = True) -> dict:
+              verbose: bool = True):
         """
         Train the neural network using mini-batch gradient descent
         
@@ -306,11 +306,11 @@ class NeuralNetwork:
             Dictionary with training history
         """
         n_samples = X_train.shape[0]
-        n_batches = max(1, n_samples // batch_size)
+        n_batches = max(1, n_samples // batch_size) # Ensure at least one batch exists (// is floor division)
         
         for epoch in range(epochs):
             # Shuffle training data
-            indices = np.random.permutation(n_samples)
+            indices = np.random.permutation(n_samples) # random permutation of indices
             X_shuffled = X_train[indices]
             y_shuffled = y_train[indices]
             
@@ -332,12 +332,12 @@ class NeuralNetwork:
                 epoch_loss += batch_loss
                 
                 # Backward pass
-                self.backward(y_pred, y_batch)
+                self.backward(y_pred, y_batch) # compute gradients and store in layers
                 
                 # Update weights
                 self.update_weights()
             
-            # Average loss for the epoch
+            # Average loss. Epoch loss per batch
             avg_loss = epoch_loss / n_batches
             self.train_loss_history.append(avg_loss)
             
@@ -369,7 +369,7 @@ class NeuralNetwork:
             'val_acc': self.val_acc_history
         }
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X):
         """
         Make predictions
         
@@ -382,7 +382,7 @@ class NeuralNetwork:
         y_pred = self.forward(X)
         return np.argmax(y_pred, axis=1)
     
-    def evaluate(self, X: np.ndarray, y: np.ndarray) -> float:
+    def evaluate(self, X, y):
         """
         Evaluate accuracy
         
