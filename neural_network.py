@@ -74,11 +74,11 @@ class Softmax(ActivationFunction):
         exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
         return exp_x / np.sum(exp_x, axis=1, keepdims=True)
     
-    # @staticmethod
-    # def backward(x):
-    #     # Jacobian matrix of softmax
-    #     soft = Softmax.forward(x).reshape(-1, 1)
-    #     return np.diagflat(soft) - np.dot(soft, soft.T)
+    @staticmethod
+    def backward(x: np.ndarray) -> np.ndarray:
+        # Actual gradient calculation is done in the NeuralNetwork.backward method
+        # and this is a placeholder that multiplies gradient by 1. 
+        return np.ones_like(x)
 
 
 class Layer:
