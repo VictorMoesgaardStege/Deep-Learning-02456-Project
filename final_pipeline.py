@@ -19,9 +19,10 @@ from helper_functions import (
     compute_confusion_matrix,
     compute_metrics,
     plot_confusion_matrix,
-    plot_training_history
+    plot_training_history,
+    create_model_summary
 )
-from wandb_logger import WandBLogger, create_model_summary
+from wandb_logger import WandBLogger
 from cifar10_loader import load_cifar10_data, get_cifar10_class_names
 
 
