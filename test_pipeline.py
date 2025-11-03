@@ -11,7 +11,7 @@ from utils import (
     compute_confusion_matrix,
     compute_metrics,
 )
-from wandb_logger import create_model_summary
+# from wandb_logger import create_model_summary
 from cifar10_loader import load_cifar10_data
 
 
