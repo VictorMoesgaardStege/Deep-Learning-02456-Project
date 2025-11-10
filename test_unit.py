@@ -40,7 +40,7 @@ def test_layer():
     print("Testing Layer...")
     
     np.random.seed(42)
-    layer = Layer(input_size=5, output_size=3, activation=ReLU)
+    layer = Layer(input_size=5, output_size=3, activation=ReLU, weights_init="he")
     
     # Test shapes
     assert layer.weights.shape == (5, 3), "Weight shape incorrect"
@@ -203,6 +203,36 @@ def test_optimizers():
     print("  ✓ Optimizer tests passed")
 
 
+def test_weight_initialization():
+    """Test whether He and Xavier initializations produce correct weight scale."""
+    from neural_network import Layer, ReLU
+    
+    print("Testing Weight Initialization...")
+    np.random.seed(42)
+
+    fan_in = 20
+    fan_out = 10
+
+    # Test He initialization
+    layer_he = Layer(fan_in, fan_out, activation=ReLU, weights_init="he")
+    he_std = np.std(layer_he.weights)
+    expected_he_std = np.sqrt(2.0 / fan_in)
+    assert np.isclose(he_std, expected_he_std, rtol=0.25), (
+        f"He init std incorrect: got {he_std}, expected approx {expected_he_std}"
+    )
+
+    # Test Xavier initialization
+    layer_xavier = Layer(fan_in, fan_out, activation=ReLU, weights_init="xavier")
+    xav_std = np.std(layer_xavier.weights)
+    expected_xav_std = np.sqrt(2.0 / (fan_in + fan_out))
+    assert np.isclose(xav_std, expected_xav_std, rtol=0.25), (
+        f"Xavier init std incorrect: got {xav_std}, expected approx {expected_xav_std}"
+    )
+
+    print("  ✓ Weight initialization tests passed")
+
+
+
 
 def test_training():
     """Test training loop"""
@@ -300,6 +330,7 @@ def run_all_tests():
         test_gradient_numerical()
         test_training()
         test_optimizers()
+        test_weight_initialization()
         test_utils()
         
         print()
