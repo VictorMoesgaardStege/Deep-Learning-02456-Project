@@ -148,6 +148,62 @@ def test_gradient_numerical():
     print("  ✓ Gradient numerical check passed")
 
 
+def test_optimizers():
+    """Test that different optimizers update weights differently and reduce loss."""
+    from neural_network import NeuralNetwork
+    from helper_functions import one_hot_encode
+    
+    print("Testing Optimizers (SGD, Momentum, Adam)...")
+    
+    np.random.seed(42)
+    
+    # Simple dataset
+    X = np.random.randn(50, 10)
+    y = np.random.randint(0, 3, 50)
+    y_onehot = one_hot_encode(y, 3)
+    
+    # Create 3 identical models with different optimizers
+    model_sgd = NeuralNetwork(layer_sizes=[10, 8, 3],
+                              activations=['relu', 'softmax'],
+                              learning_rate=0.1,
+                              optimizer="sgd",
+                              seed=42)
+    
+    model_momentum = NeuralNetwork(layer_sizes=[10, 8, 3],
+                                   activations=['relu', 'softmax'],
+                                   learning_rate=0.1,
+                                   optimizer="momentum",
+                                   seed=42)
+    
+    model_adam = NeuralNetwork(layer_sizes=[10, 8, 3],
+                               activations=['relu', 'softmax'],
+                               learning_rate=0.1,
+                               optimizer="adam",
+                               seed=42)
+    
+    # Train briefly (just enough to show change)
+    hist_sgd = model_sgd.train(X, y_onehot, epochs=5, batch_size=16, verbose=False)
+    hist_momentum = model_momentum.train(X, y_onehot, epochs=5, batch_size=16, verbose=False)
+    hist_adam = model_adam.train(X, y_onehot, epochs=5, batch_size=16, verbose=False)
+    
+    # Loss should decrease
+    assert hist_sgd['train_loss'][-1] < hist_sgd['train_loss'][0], "SGD should reduce loss"
+    assert hist_momentum['train_loss'][-1] < hist_momentum['train_loss'][0], "Momentum should reduce loss"
+    assert hist_adam['train_loss'][-1] < hist_adam['train_loss'][0], "Adam should reduce loss"
+    
+    # Weight updates should differ between optimizers
+    w_sgd = model_sgd.layers[0].weights
+    w_momentum = model_momentum.layers[0].weights
+    w_adam = model_adam.layers[0].weights
+    
+    assert not np.allclose(w_sgd, w_momentum), "SGD and Momentum should produce different updates"
+    assert not np.allclose(w_sgd, w_adam), "SGD and Adam should produce different updates"
+    assert not np.allclose(w_momentum, w_adam), "Momentum and Adam should produce different updates"
+    
+    print("  ✓ Optimizer tests passed")
+
+
+
 def test_training():
     """Test training loop"""
     from neural_network import NeuralNetwork
@@ -243,6 +299,7 @@ def run_all_tests():
         test_loss_functions()
         test_gradient_numerical()
         test_training()
+        test_optimizers()
         test_utils()
         
         print()
