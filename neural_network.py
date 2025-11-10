@@ -107,6 +107,12 @@ class Layer:
         # Gradients - the parameters to be updated during training
         self.dweights = None
         self.dbiases = None
+
+        # Optimizer states for more advanced optimizers like Adam - so that the optimizer can remember past gradient history.
+        self.vw = np.zeros_like(self.weights)   # velocity for weights
+        self.vb = np.zeros_like(self.biases)    # velocity for biases
+        self.sw = np.zeros_like(self.weights)   # squared second moment estimate for weights
+        self.sb = np.zeros_like(self.biases)    # squared second moment estimate for biases
     
     def forward(self, x):
         """
@@ -157,7 +163,10 @@ class NeuralNetwork:
                  activations: List[str] = None,
                  learning_rate: float = 0.01,
                  l2_lambda: float = 0.0,
+                 optimizer="sgd",
                  seed: Optional[int] = None):
+        
+
         """
         Initialize the neural network
         
@@ -200,6 +209,9 @@ class NeuralNetwork:
         self.train_acc_history = []
         self.val_loss_history = []
         self.val_acc_history = []
+
+        # Optimizer choice lowered
+        self.optimizer = optimizer.lower()
     
     def forward(self, x):
         """
@@ -269,16 +281,56 @@ class NeuralNetwork:
         
         return data_loss + l2_loss
     
-    def update_weights(self):
-        """Update weights and biases using gradients"""
+    def update_weights(self, t):
+        """Update weights and biases using gradients
+           t = number of update steps taken so far (for Adam bias correction)."""
         for layer in self.layers:
             # Add L2 regularization gradient to weight gradients
             if self.l2_lambda > 0:
                 layer.dweights += self.l2_lambda * layer.weights # 1/m is already included in layer.dweights
-            
-            # Update weights and biases
-            layer.weights -= self.learning_rate * layer.dweights
-            layer.biases -= self.learning_rate * layer.dbiases
+
+            if self.optimizer == "sgd":
+                layer.weights -= self.learning_rate * layer.dweights
+                layer.biases  -= self.learning_rate * layer.dbiases
+
+            elif self.optimizer == "momentum":
+                # Momentum parameters
+                beta = 0.9
+
+                # Update velocity
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Update weights and biases
+                layer.weights -= self.learning_rate * layer.vw
+                layer.biases  -= self.learning_rate * layer.vb
+
+
+            elif self.optimizer == "adam":
+                # Adam optimizer parameters
+                beta = 0.9
+                gamma = 0.999
+                epsilon = 1e-8
+
+                # Update biased first moment estimate
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Update biased second moment estimate
+                layer.sw = gamma * layer.sw + (1 - gamma) * (layer.dweights ** 2)
+                layer.sb = gamma * layer.sb + (1 - gamma) * (layer.dbiases ** 2)
+
+                # Compute bias-corrected first moment estimate
+                vw_corrected = layer.vw / (1 - beta ** t)
+                vb_corrected = layer.vb / (1 - beta ** t)
+
+                # Compute bias-corrected second moment estimate
+                sw_corrected = layer.sw / (1 - beta ** t)
+                sb_corrected = layer.sb / (1 - beta ** t)
+
+                # Update weights and biases
+                layer.weights -= self.learning_rate * vw_corrected / (np.sqrt(sw_corrected) + epsilon)
+                layer.biases  -= self.learning_rate * vb_corrected / (np.sqrt(sb_corrected) + epsilon)
     
     def train(self, 
               X_train,
@@ -307,6 +359,8 @@ class NeuralNetwork:
         """
         n_samples = X_train.shape[0]
         n_batches = max(1, n_samples // batch_size) # Ensure at least one batch exists (// is floor division)
+
+        t = 1   # Adam timestep counter
         
         for epoch in range(epochs):
             # Shuffle training data
@@ -334,8 +388,12 @@ class NeuralNetwork:
                 # Backward pass
                 self.backward(y_pred, y_batch) # compute gradients and store in layers
                 
-                # Update weights
-                self.update_weights()
+                # # Update weights
+                # self.update_weights()
+
+                # Update weights using correct Adam timestep
+                self.update_weights(t)
+                t += 1   # Increment after each batch
             
             # Average loss. Epoch loss per batch
             avg_loss = epoch_loss / n_batches
