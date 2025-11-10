@@ -1,4 +1,4 @@
-program: final_pipeline.py   # entry point for the sweep
+program: final_pipeline.py
 method: bayes
 
 metric:
@@ -7,14 +7,14 @@ metric:
 
 parameters:
   learning_rate:
-    min: 0.00005
-    max: 0.01
-    distribution: log_uniform
+    distribution: log_uniform_values
+    min: 5e-5
+    max: 1e-2
 
   l2_lambda:
+    distribution: log_uniform_values
     min: 1e-6
     max: 1e-3
-    distribution: log_uniform
 
   batch_size:
     values: [32, 64, 128, 256]
@@ -40,3 +40,7 @@ parameters:
   seed:
     value: 42
 
+# (optional) stop weak runs early to speed up bayes optimization
+early_terminate:
+  type: hyperband
+  min_iter: 5
