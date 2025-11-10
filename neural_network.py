@@ -84,7 +84,7 @@ class Softmax(ActivationFunction):
 class Layer:
     """Single layer in the neural network"""
     
-    def __init__(self, input_size: int, output_size: int, activation: ActivationFunction):
+    def __init__(self, input_size, output_size, activation, weights_init):
         """
         Initialize layer with random weights and zero biases
         
@@ -93,9 +93,23 @@ class Layer:
             output_size: Number of output neurons
             activation: Activation function to use
         """
-        # He normal initialization for weights: W ~ N(0, sqrt(2/input size)) 
-        # This initialization works well with ReLU activations (https://www.geeksforgeeks.org/machine-learning/weight-initialization-techniques-for-deep-neural-networks/)
-        self.weights = np.random.randn(input_size, output_size) * np.sqrt(2.0 / input_size)
+
+        fan_in = input_size
+        fan_out = output_size
+
+        if weights_init == "he":
+            # He normal initialization for weights: W ~ N(0, sqrt(2/input size)) 
+            # This initialization works well with ReLU activations (https://www.geeksforgeeks.org/machine-learning/weight-initialization-techniques-for-deep-neural-networks/)
+            self.weights = np.random.randn(fan_in, fan_out) * np.sqrt(2.0 / fan_in)
+
+        elif weights_init == "xavier":
+            std = np.sqrt(2.0 / (fan_in + fan_out)) # Xavier normal std
+            self.weights = np.random.randn(fan_in, fan_out) * std
+
+        else:
+            # raise error for unknown initialization
+            raise ValueError(f"Unknown weight initialization method: {weights_init}")
+
         self.biases = np.zeros((1, output_size))
         self.activation = activation
         
@@ -164,6 +178,7 @@ class NeuralNetwork:
                  learning_rate: float = 0.01,
                  l2_lambda: float = 0.0,
                  optimizer="sgd",
+                 weights_init="he",
                  seed: Optional[int] = None):
         
 
@@ -184,6 +199,12 @@ class NeuralNetwork:
         self.learning_rate = learning_rate
         self.l2_lambda = l2_lambda
         self.layers = []
+
+        # Weight initialization choice lowered
+        self.weights_init = weights_init.lower()
+
+        # Optimizer choice lowered
+        self.optimizer = optimizer.lower()
         
         # # Default activations: ReLU for hidden layers, Softmax for output
         # if activations is None:
@@ -201,7 +222,7 @@ class NeuralNetwork:
         for i in range(len(layer_sizes) - 1):
             activation_name = activations[i].lower()
             activation = activation_map.get(activation_name, ReLU)
-            layer = Layer(layer_sizes[i], layer_sizes[i + 1], activation)
+            layer = Layer(layer_sizes[i], layer_sizes[i+1], activation, self.weights_init)
             self.layers.append(layer)
         
         # Training history
@@ -210,8 +231,6 @@ class NeuralNetwork:
         self.val_loss_history = []
         self.val_acc_history = []
 
-        # Optimizer choice lowered
-        self.optimizer = optimizer.lower()
     
     def forward(self, x):
         """
@@ -325,8 +344,8 @@ class NeuralNetwork:
                 vb_corrected = layer.vb / (1 - beta ** t)
 
                 # Compute bias-corrected second moment estimate
-                sw_corrected = layer.sw / (1 - beta ** t)
-                sb_corrected = layer.sb / (1 - beta ** t)
+                sw_corrected = layer.sw / (1 - gamma ** t)
+                sb_corrected = layer.sb / (1 - gamma ** t)
 
                 # Update weights and biases
                 layer.weights -= self.learning_rate * vw_corrected / (np.sqrt(sw_corrected) + epsilon)
@@ -388,10 +407,8 @@ class NeuralNetwork:
                 # Backward pass
                 self.backward(y_pred, y_batch) # compute gradients and store in layers
                 
-                # # Update weights
-                # self.update_weights()
 
-                # Update weights using correct Adam timestep
+                # Update weights using Adam timestep implementation
                 self.update_weights(t)
                 t += 1   # Increment after each batch
             
