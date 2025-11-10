@@ -78,36 +78,30 @@ def main():
     # 3. Define Model Architecture
     # ========================================
     print("\n[3/7] Creating neural network...")
+
+    config = wandb_logger.run.config  # pull parameters from sweep agent
     
     # Network architecture: Input -> Hidden1 -> Hidden2 -> Output
     # CIFAR-10 has 3072 input features (32x32x3)
-    layer_sizes = [X_train.shape[1], 512, 256, num_classes]
-    activations = ['relu', 'relu', 'softmax']
+    layer_sizes = [X_train.shape[1]] + config.hidden_layers + [num_classes]
+    activations = config.activations
     
-    # Hyperparameters
-    config = {
-        'layer_sizes': layer_sizes,
-        'activations': activations,
-        'learning_rate': 0.001,
-        'l2_lambda': 0.0001,
-        'epochs': 50,
-        'batch_size': 128,
-        'seed': 42,
-        'dataset': 'CIFAR-10'
-    }
     
-    # Create model
+    # Create Neural Network instance
     model = NeuralNetwork(
-        layer_sizes=config['layer_sizes'],
-        activations=config['activations'],
-        learning_rate=config['learning_rate'],
-        l2_lambda=config['l2_lambda'],
-        seed=config['seed']
+        layer_sizes=layer_sizes,
+        activations=activations,
+        learning_rate=config.learning_rate,
+        l2_lambda=config.l2_lambda,
+        optimizer=config.optimizer,
+        weights_init=config.weights_init,
+        seed=config.seed
     )
     
     # Print model summary
     model_summary = create_model_summary(layer_sizes, activations)
     print(model_summary)
+    wandb_logger.log_model_architecture(model_summary)
     
     # ========================================
     # 4. Initialize WandB Logger
@@ -134,11 +128,12 @@ def main():
         y_train=y_train_onehot,
         X_val=X_val_norm,
         y_val=y_val_onehot,
-        epochs=config['epochs'],
-        batch_size=config['batch_size'],
+        epochs=config.epochs,
+        batch_size=config.batch_size,
         loss_type='cross_entropy',
         verbose=True
     )
+
     
     print("-" * 70)
     print("Training complete!")
