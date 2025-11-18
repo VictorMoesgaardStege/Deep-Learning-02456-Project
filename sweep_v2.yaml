@@ -20,7 +20,7 @@ parameters:
     values: [32, 64, 128, 256]
 
   optimizer:
-    values: ["sgd", "momentum", "adam"]
+    values: ["sgd", "momentum", "nesterov","adam"]
 
   weights_init:
     values: ["he", "xavier"]
