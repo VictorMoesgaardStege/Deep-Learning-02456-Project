@@ -63,6 +63,19 @@ class Tanh(ActivationFunction):
     @staticmethod
     def backward(x):
         return 1 - np.tanh(x) ** 2
+    
+class Identity(ActivationFunction):
+    """Identity (linear) activation function"""
+
+    @staticmethod
+    def forward(x):
+        # Just returns input unchanged
+        return x
+
+    @staticmethod
+    def backward(x):
+        # Derivative of identity is 1 everywhere
+        return np.ones_like(x)
 
 
 class Softmax(ActivationFunction):
@@ -215,6 +228,7 @@ class NeuralNetwork:
             'relu': ReLU,
             'sigmoid': Sigmoid,
             'tanh': Tanh,
+            'identity': Identity,
             'softmax': Softmax
         }
         
