@@ -338,6 +338,23 @@ class NeuralNetwork:
                 layer.weights -= self.learning_rate * layer.vw
                 layer.biases  -= self.learning_rate * layer.vb
 
+            elif self.optimizer == "nesterov":
+                # Nesterov Accelerated Gradient (NAG) using a look-ahead style update
+                beta = 0.9
+
+                # Save previous velocity - this is the exponential moving averages of past gradients.
+                vw_prev = layer.vw.copy()
+                vb_prev = layer.vb.copy()
+
+                # Update velocities as in momentum
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Look-ahead update: direction of the new velocity but still “remembers” the previous one in a way that approximates the behaviour of Nesterov’s look-ahead
+                layer.weights -= self.learning_rate * ((1 + beta) * layer.vw - beta * vw_prev)
+                layer.biases  -= self.learning_rate * ((1 + beta) * layer.vb - beta * vb_prev)
+
+
 
             elif self.optimizer == "adam":
                 # Adam optimizer parameters
