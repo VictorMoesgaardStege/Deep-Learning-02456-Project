@@ -75,7 +75,7 @@ class Softmax(ActivationFunction):
         return exp_x / np.sum(exp_x, axis=1, keepdims=True)
     
     @staticmethod
-    def backward(x: np.ndarray) -> np.ndarray:
+    def backward(x):
         # Actual gradient calculation is done in the NeuralNetwork.backward method
         # and this is a placeholder that multiplies gradient by 1. 
         return np.ones_like(x)
@@ -329,7 +329,7 @@ class NeuralNetwork:
                 # Adam optimizer parameters
                 beta = 0.9
                 gamma = 0.999
-                epsilon = 1e-8
+                epsilon = 1e-7
 
                 # Update biased first moment estimate
                 layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
@@ -379,7 +379,7 @@ class NeuralNetwork:
         n_samples = X_train.shape[0]
         n_batches = max(1, n_samples // batch_size) # Ensure at least one batch exists (// is floor division)
 
-        t = 1   # Adam timestep counter
+        t = 1   # Adam timestep counter. Should be changed to 0?
         
         for epoch in range(epochs):
             # Shuffle training data
