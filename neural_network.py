@@ -1,0 +1,544 @@
+"""
+Neural Network Implementation from Scratch using NumPy
+This module implements a feedforward neural network with:
+- Forward pass with matrix multiplications and activation functions
+- Loss computation (MSE and Cross-Entropy) with L2 regularization
+- Backward pass with manual gradient calculation
+- Mini-batch gradient descent training
+"""
+
+import numpy as np
+from typing import List, Tuple, Optional, Callable
+
+
+class ActivationFunction:
+    """Base class for activation functions with forward and backward methods"""
+    # If activation is not specified, raise error
+    
+    @staticmethod
+    def forward(x):
+        raise NotImplementedError
+    
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        #return gradient wrt input z given upstream gradient
+        raise NotImplementedError
+
+
+class ReLU(ActivationFunction):
+    """ReLU activation function""" 
+
+    #ReuLU activation function for forward
+    @staticmethod
+    def forward(x):
+        return np.maximum(0, x)
+    
+    #ReuLU activation function for backward pass (derivative of relu)
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        return upstream_grad * (z > 0) # Derivative is 1 for x>0, else 0 (this is a logical test)
+
+
+class Sigmoid(ActivationFunction):
+    """Sigmoid activation function"""
+    
+    @staticmethod
+    def forward(x):
+        # Clip to prevent overflow (every value is squashed between -500 and 500)
+        x_clipped = np.clip(x, -500, 500)
+        return 1 / (1 + np.exp(-x_clipped))
+    
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        return upstream_grad * a * (1 - a)
+
+
+class Tanh(ActivationFunction):
+    """Tanh activation function"""
+    
+    @staticmethod
+    def forward(x):
+        return np.tanh(x)
+    
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        return upstream_grad * (1 - a**2)
+    
+class Identity(ActivationFunction):
+    """Identity (linear) activation function"""
+
+    @staticmethod
+    def forward(x):
+        # Just returns input unchanged
+        return x
+
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        # Derivative of identity is 1 everywhere
+        return upstream_grad * np.ones_like(z)
+
+
+class Softmax(ActivationFunction):
+    """Softmax activation function for multi-class classification"""
+    
+    @staticmethod
+    def forward(x):
+        # Subtract max for numerical stability - it makes no difference to the result if we subtract a constant from all inputs. Avoids large exponents problems.
+        exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
+        return exp_x / np.sum(exp_x, axis=1, keepdims=True)
+    
+    @staticmethod
+    def backward(z, a, upstream_grad):
+        # a = softmax(z)
+        # upstream_grad = dL/da
+        
+        # Compute Jacobian * upstream_grad
+        dot = np.sum(upstream_grad * a, axis=1, keepdims=True)
+        return a * (upstream_grad - dot)
+
+
+class Layer:
+    """Single layer in the neural network"""
+    
+    def __init__(self, input_size, output_size, activation, weights_init):
+        """
+        Initialize layer with random weights and zero biases
+        
+        Args:
+            input_size: Number of input features
+            output_size: Number of output neurons
+            activation: Activation function to use
+        """
+
+        fan_in = input_size
+        fan_out = output_size
+
+        if weights_init == "he":
+            # He normal initialization for weights: W ~ N(0, sqrt(2/input size)) 
+            # This initialization works well with ReLU activations (https://www.geeksforgeeks.org/machine-learning/weight-initialization-techniques-for-deep-neural-networks/)
+            self.weights = np.random.randn(fan_in, fan_out) * np.sqrt(2.0 / fan_in)
+
+        elif weights_init == "xavier":
+            std = np.sqrt(2.0 / (fan_in + fan_out)) # Xavier normal std
+            self.weights = np.random.randn(fan_in, fan_out) * std
+
+        else:
+            # raise error for unknown initialization
+            raise ValueError(f"Unknown weight initialization method: {weights_init}")
+
+        self.biases = np.zeros((1, output_size))
+        self.activation = activation
+        
+        # Cache for backward pass (memory trick for storing intermediate calculation values)
+        self.input = None
+        self.z = None  # Pre-activation
+        self.a = None  # Post-activation
+        
+        # Gradients - the parameters to be updated during training
+        self.dweights = None
+        self.dbiases = None
+
+        # Optimizer states for more advanced optimizers like Adam - so that the optimizer can remember past gradient history.
+        self.vw = np.zeros_like(self.weights)   # velocity for weights
+        self.vb = np.zeros_like(self.biases)    # velocity for biases
+        self.sw = np.zeros_like(self.weights)   # squared second moment estimate for weights
+        self.sb = np.zeros_like(self.biases)    # squared second moment estimate for biases
+    
+    def forward(self, x):
+        """
+        Forward pass through the layer
+        
+        Args:
+            x: Input data of shape (batch_size, input_size)
+            
+        Returns:
+            Activated output of shape (batch_size, output_size)
+        """
+        self.input = x
+        self.z = np.dot(x, self.weights) + self.biases
+        self.a = self.activation.forward(self.z)
+        return self.a
+    
+    def backward(self, da):
+        """
+        Backward pass through the layer
+        
+        Args:
+            da: Gradient of loss with respect to layer output (meaning the activated output from given layer)
+            
+        Returns:
+            Gradient of loss with respect to layer input
+        """
+        # Gradient through activation 
+        dz = self.activation.backward(self.z, self.a, da) # actually dL/dz = dL/da * da/dz
+        
+        
+        # Gradient with respect to weights and biases
+        batch_size = self.input.shape[0]
+        self.dweights = np.dot(self.input.T, dz) / batch_size
+        self.dbiases = np.sum(dz, axis=0, keepdims=True) / batch_size # average of dz (batch_size,output_size) over batch
+        
+        # Gradient with respect to input
+        dx = np.dot(dz, self.weights.T) # dL/dx = dL/dz * dz/dx (because dz/dx = W.T)
+        
+        return dx
+
+
+class NeuralNetwork:
+    """
+    Feedforward Neural Network implemented from scratch using NumPy
+    """
+    
+    def __init__(self, 
+                 layer_sizes: List[int],
+                 activations: List[str] = None,
+                 learning_rate: float = 0.01,
+                 l2_lambda: float = 0.0,
+                 optimizer="sgd",
+                 weights_init="he",
+                 seed: Optional[int] = None):
+        
+
+        """
+        Initialize the neural network
+        
+        Args:
+            layer_sizes: List of layer sizes [input_size, hidden1, hidden2, ..., output_size]
+            activations: List of activation function names for each layer
+            learning_rate: Learning rate for gradient descent
+            l2_lambda: L2 regularization parameter
+            seed: Random seed for reproducibility
+        """
+        if seed is not None:
+            np.random.seed(seed)
+        
+        # Loss type (set during training)
+        self.loss_type = "cross_entropy"
+        
+        
+        self.layer_sizes = layer_sizes
+        self.learning_rate = learning_rate
+        self.l2_lambda = l2_lambda
+        self.layers = []
+
+        # Weight initialization choice lowered
+        self.weights_init = weights_init.lower()
+
+        # Optimizer choice lowered
+        self.optimizer = optimizer.lower()
+        
+        # # Default activations: ReLU for hidden layers, Softmax for output
+        # if activations is None:
+        #     activations = ['relu'] * (len(layer_sizes) - 2) + ['softmax']
+        
+        # Map activation names to classes
+        activation_map = {
+            'relu': ReLU,
+            'sigmoid': Sigmoid,
+            'tanh': Tanh,
+            'identity': Identity,
+            'softmax': Softmax
+        }
+        
+        # Create layers
+        for i in range(len(layer_sizes) - 1):
+            activation_name = activations[i].lower()
+            activation = activation_map.get(activation_name, ReLU)
+            layer = Layer(layer_sizes[i], layer_sizes[i+1], activation, self.weights_init)
+            self.layers.append(layer)
+        
+        # Training history
+        self.train_loss_history = []
+        self.train_acc_history = []
+        self.val_loss_history = []
+        self.val_acc_history = []
+
+        # Adam timestep counter (for bias correction)
+        self.t = 0
+
+
+    
+    def forward(self, x):
+        """
+        Forward pass through the entire network
+        
+        Args:
+            x: Input data of shape (batch_size, input_size)
+            
+        Returns:
+            Network output of shape (batch_size, output_size)
+        """
+        for layer in self.layers:
+            x = layer.forward(x)
+        return x
+    
+    def backward(self, y_pred, y_true):
+        """
+        Backward pass through the entire network.
+
+        Args:
+            y_pred: Network output (after final activation), shape (batch, C)
+            y_true: True targets (one-hot), shape (batch, C)
+        """
+
+        loss_type = self.loss_type
+        EPSILON_CLIP = 1e-10
+        MAX_CLIP = 1 - 1e-10
+
+        # Gradient of loss w.r.t. network output (post-activation)
+        if loss_type == "mse":
+            # dL/da = 2 * (a - y)
+            upstream_grad = 2.0 * (y_pred - y_true)
+
+        elif loss_type == "cross_entropy":
+            # L = -sum y * log(a)
+            # dL/da = -y / a  (per sample)
+            y_pred_clipped = np.clip(y_pred, EPSILON_CLIP, MAX_CLIP)
+            upstream_grad = -y_true / y_pred_clipped # when backpropagating through softmax, this simplifies to (a - y)
+        else:
+            raise ValueError(f"Unknown loss type in backward: {loss_type}")
+
+        # Backpropagate through all layers
+        grad = upstream_grad
+        # Backpropagate through layers
+        for layer in reversed(self.layers):
+            grad = layer.backward(grad)
+    
+    def compute_loss(self, y_pred, y_true):
+        """
+        Compute loss with L2 regularization
+        
+        Args:
+            y_pred: Predicted values
+            y_true: True values
+            loss_type: Type of loss ('mse' or 'cross_entropy') - maybe implement mse later
+            
+        Returns:
+            Loss value
+        """
+        # Constants for numerical stability
+        EPSILON_CLIP = 1e-10  # Small value to prevent log(0) and division by zero
+        MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
+
+        batch_size = y_true.shape[0]
+        loss_type = self.loss_type
+        
+        if loss_type == 'mse':
+            # Mean Squared Error
+            data_loss = np.mean(np.sum((y_pred - y_true) ** 2, axis=1))
+        elif loss_type == 'cross_entropy':
+            # Cross-Entropy Loss
+            # Clip predictions to prevent log(0)
+            y_pred_clipped = np.clip(y_pred, EPSILON_CLIP, MAX_CLIP)
+            data_loss = -np.mean(np.sum(y_true * np.log(y_pred_clipped), axis=1)) # negative log likelihood
+        else:
+            raise ValueError(f"Unknown loss type: {loss_type}")
+        
+        l2_loss = 0
+        if self.l2_lambda > 0 and self.optimizer != "adam": # L2 regularization term (not included for Adam optimizer)
+            for layer in self.layers:
+                l2_loss += np.sum(layer.weights ** 2)
+            l2_loss *= (self.l2_lambda / (2 * batch_size))
+        
+        return data_loss + l2_loss
+    
+    def update_weights(self):
+        """Update weights and biases using gradients"""
+
+        # Increment global timestep once per update call
+        self.t += 1
+        t = self.t
+        
+        for layer in self.layers:
+            # Inside update_weights, before optimizer branches:
+            if self.l2_lambda > 0 and self.optimizer != "adam":
+                layer.dweights += self.l2_lambda * layer.weights # 1/m is already included in layer.dweights
+
+            if self.optimizer == "sgd":
+                layer.weights -= self.learning_rate * layer.dweights
+                layer.biases  -= self.learning_rate * layer.dbiases
+
+            elif self.optimizer == "momentum":
+                # Momentum parameters
+                beta = 0.9
+
+                # Update velocity
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Update weights and biases
+                layer.weights -= self.learning_rate * layer.vw
+                layer.biases  -= self.learning_rate * layer.vb
+
+            elif self.optimizer == "nesterov":
+                # Nesterov Accelerated Gradient (NAG) using a look-ahead style update
+                beta = 0.9
+
+                # Save previous velocity - this is the exponential moving averages of past gradients.
+                vw_prev = layer.vw.copy()
+                vb_prev = layer.vb.copy()
+
+                # Update velocities as in momentum
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Look-ahead update: direction of the new velocity but still “remembers” the previous one in a way that approximates the behaviour of Nesterov’s look-ahead
+                layer.weights -= self.learning_rate * ((1 + beta) * layer.vw - beta * vw_prev)
+                layer.biases  -= self.learning_rate * ((1 + beta) * layer.vb - beta * vb_prev)
+
+            elif self.optimizer == "adam":
+                # Adam optimizer parameters
+                beta = 0.9
+                gamma = 0.999
+                epsilon = 1e-8
+
+                # Update biased first moment estimate
+                layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
+                layer.vb = beta * layer.vb + (1 - beta) * layer.dbiases
+
+                # Update biased second moment estimate
+                layer.sw = gamma * layer.sw + (1 - gamma) * (layer.dweights ** 2)
+                layer.sb = gamma * layer.sb + (1 - gamma) * (layer.dbiases ** 2)
+
+                # Compute bias-corrected first moment estimate
+                vw_corrected = layer.vw / (1 - beta ** t)
+                vb_corrected = layer.vb / (1 - beta ** t)
+
+                # Compute bias-corrected second moment estimate
+                sw_corrected = layer.sw / (1 - gamma ** t)
+                sb_corrected = layer.sb / (1 - gamma ** t)
+
+                # AdamW-style decoupled weight decay (if l2_lambda is used as weight decay)
+                weight_decay = self.l2_lambda
+                if weight_decay > 0.0:
+                    layer.weights -= self.learning_rate * weight_decay * layer.weights
+
+                # Update weights and biases
+                layer.weights -= self.learning_rate * vw_corrected / (np.sqrt(sw_corrected) + epsilon)
+                layer.biases  -= self.learning_rate * vb_corrected / (np.sqrt(sb_corrected) + epsilon)
+    
+    def train(self, 
+              X_train,
+              y_train,
+              X_val = None,
+              y_val = None,
+              epochs = 100,
+              batch_size = 32,
+              loss_type: str = 'cross_entropy',
+              verbose: bool = True):
+        """
+        Train the neural network using mini-batch gradient descent
+        
+        Args:
+            X_train: Training data of shape (n_samples, n_features)
+            y_train: Training labels (one-hot encoded for classification)
+            X_val: Validation data (optional)
+            y_val: Validation labels (optional)
+            epochs: Number of training epochs
+            batch_size: Mini-batch size
+            loss_type: Type of loss ('mse' or 'cross_entropy')
+            verbose: Whether to print training progress
+            
+        Returns:
+            Dictionary with training history
+        """
+
+        # Set loss type for this training run
+        self.loss_type = loss_type.lower()
+
+        n_samples = X_train.shape[0]
+        n_batches = max(1, n_samples // batch_size) # Ensure at least one batch exists (// is floor division)
+
+        # Reset Adam timestep for this training run
+        self.t = 0
+        
+        for epoch in range(epochs):
+            # Shuffle training data
+            indices = np.random.permutation(n_samples) # random permutation of indices
+            X_shuffled = X_train[indices]
+            y_shuffled = y_train[indices]
+            
+            epoch_loss = 0
+            
+            # Mini-batch gradient descent
+            for i in range(n_batches):
+                start_idx = i * batch_size
+                end_idx = min(start_idx + batch_size, n_samples)
+                
+                X_batch = X_shuffled[start_idx:end_idx]
+                y_batch = y_shuffled[start_idx:end_idx]
+                
+                # Forward pass
+                y_pred = self.forward(X_batch)
+                
+                # Compute loss
+                batch_loss = self.compute_loss(y_pred, y_batch)
+                epoch_loss += batch_loss
+                
+                # Backward pass
+                self.backward(y_pred, y_batch) # compute gradients and store in layers
+                
+
+                # Update weights using Adam timestep implementation
+                self.update_weights()
+            
+            # Average loss. Epoch loss per batch
+            avg_loss = epoch_loss / n_batches
+            self.train_loss_history.append(avg_loss)
+            
+            # Compute training accuracy
+            train_acc = self.evaluate(X_train, y_train)
+            self.train_acc_history.append(train_acc)
+            
+            # Validation metrics
+            if X_val is not None and y_val is not None:
+                val_pred = self.forward(X_val)
+                val_loss = self.compute_loss(val_pred, y_val)
+                val_acc = self.evaluate(X_val, y_val)
+                self.val_loss_history.append(val_loss)
+                self.val_acc_history.append(val_acc)
+                
+                if verbose and (epoch + 1) % 10 == 0:
+                    print(f"Epoch {epoch + 1}/{epochs} - "
+                          f"Loss: {avg_loss:.4f} - Acc: {train_acc:.4f} - "
+                          f"Val Loss: {val_loss:.4f} - Val Acc: {val_acc:.4f}")
+            else:
+                if verbose and (epoch + 1) % 10 == 0:
+                    print(f"Epoch {epoch + 1}/{epochs} - "
+                          f"Loss: {avg_loss:.4f} - Acc: {train_acc:.4f}")
+        
+        return {
+            'train_loss': self.train_loss_history,
+            'train_acc': self.train_acc_history,
+            'val_loss': self.val_loss_history,
+            'val_acc': self.val_acc_history
+        }
+    
+    def predict(self, X):
+        """
+        Make predictions
+        
+        Args:
+            X: Input data of shape (n_samples, n_features)
+            
+        Returns:
+            Predicted class indices
+        """
+        y_pred = self.forward(X)
+        return np.argmax(y_pred, axis=1)
+    
+    def evaluate(self, X, y):
+        """
+        Evaluate accuracy
+        
+        Args:
+            X: Input data
+            y: True labels (one-hot encoded)
+            
+        Returns:
+            Accuracy score
+        """
+        predictions = self.predict(X)
+        true_labels = np.argmax(y, axis=1)
+        accuracy = np.mean(predictions == true_labels)
+        return accuracy

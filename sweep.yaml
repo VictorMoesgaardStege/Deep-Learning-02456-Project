@@ -1,0 +1,46 @@
+program: final_pipeline.py
+method: bayes
+
+metric:
+  name: val_accuracy
+  goal: maximize
+
+parameters:
+  learning_rate:
+    distribution: log_uniform_values
+    min: 5e-5
+    max: 1e-2
+
+  l2_lambda:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  batch_size:
+    values: [32, 64, 128, 256]
+
+  optimizer:
+    values: ["sgd", "momentum", "adam"]
+
+  weights_init:
+    values: ["he", "xavier"]
+
+  hidden_layers:
+    values:
+      - [512, 256]
+      - [1024, 512]
+      - [256, 256, 128]
+      - [512, 512]
+
+  activations:
+    values:
+      - ["relu", "relu", "softmax"]
+      - ["tanh", "tanh", "softmax"]
+
+  seed:
+    value: 42
+
+# (optional) stop weak runs early to speed up bayes optimization
+early_terminate:
+  type: hyperband
+  min_iter: 5
