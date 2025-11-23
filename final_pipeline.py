@@ -1,15 +1,5 @@
 """
-Example: Training a Neural Network from Scratch on CIFAR-10 Dataset
-This script demonstrates all features:
-- Forward pass with matrix multiplications and activations
-- Loss computation (Cross-Entropy) with L2 regularization
-- Backward pass with manual gradient calculation
-- Mini-batch gradient descent training
-- Evaluation metrics (accuracy, loss curves, confusion matrix)
-- WandB experiment tracking
-"""
-"""
-Training a Neural Network on CIFAR-10 with WandB + Sweep Support
+Training a Neural Network on CIFAR-10 with WandB + Sweep Support (v2)
 """
 
 import numpy as np
@@ -30,9 +20,47 @@ from wandb_logger import WandBLogger
 from cifar10_loader import load_cifar10_data, get_cifar10_class_names
 
 
+def build_architecture_from_config(config, input_dim, num_classes):
+    """
+    Build layer_sizes and activations lists according to sweep_v2.yaml.
+    
+    - num_layers: number of hidden layers
+    - hidden_size_i: size of each hidden layer i
+    - activation_i: activation name (incl. 'clean_*' variants)
+    - output_activation: activation for output layer (e.g. 'softmax')
+    """
+
+    # Number of hidden layers
+    num_layers = getattr(config, "num_layers", 3)
+
+    # Collect hidden sizes
+    hidden_sizes = []
+    for i in range(1, num_layers + 1):
+        size = getattr(config, f"hidden_size_{i}")
+        hidden_sizes.append(size)
+
+    # Collect hidden activations (map "clean_*" to base names)
+    activations = []
+    for i in range(1, num_layers + 1):
+        act = getattr(config, f"activation_{i}")
+        # Map "clean_relu" -> "relu", etc.
+        if act.startswith("clean_"):
+            act = act.replace("clean_", "")
+        activations.append(act)
+
+    # Output layer activation (e.g. "softmax")
+    output_activation = getattr(config, "output_activation", "softmax")
+    activations.append(output_activation)
+
+    # Full layer sizes: input -> hidden(s) -> output
+    layer_sizes = [input_dim] + hidden_sizes + [num_classes]
+
+    return layer_sizes, activations
+
+
 def main():
     print("=" * 70)
-    print("Neural Network from Scratch - Training on CIFAR-10")
+    print("Neural Network from Scratch - Training on CIFAR-10 (Sweep v2)")
     print("=" * 70)
 
     np.random.seed(42)
@@ -63,12 +91,16 @@ def main():
         enabled=True
     )
 
-    config = wandb.config  # <--- sweep parameters come from here
+    config = wandb.config  # sweep parameters come from here
 
-    # Build model architecture dynamically based on sweep
+    # 4. Build model architecture dynamically based on sweep_v2.yaml
     input_dim = X_train.shape[1]
-    layer_sizes = [input_dim] + config.hidden_layers + [num_classes]
-    activations = config.activations
+
+    layer_sizes, activations = build_architecture_from_config(
+        config=config,
+        input_dim=input_dim,
+        num_classes=num_classes
+    )
 
     print("\n[4/7] Creating neural network...")
     model = NeuralNetwork(
@@ -94,18 +126,27 @@ def main():
         y_val=y_val_onehot,
         epochs=getattr(config, "epochs", 50),   # allow sweeps or default
         batch_size=config.batch_size,
-        loss_type='cross_entropy',
+        loss_type=config.loss_type,             # <- use sweep loss_type ("cross_entropy" or "mse")
         verbose=True
     )
 
+    # Log metrics per epoch (including val_accuracy for sweep metric)
+    best_val_acc = 0.0
     for epoch in range(len(history['train_loss'])):
+        val_acc = history['val_acc'][epoch] if len(history['val_acc']) > epoch else None
+        if val_acc is not None:
+            best_val_acc = max(best_val_acc, val_acc)
+
         wandb_logger.log_metrics({
             'epoch': epoch + 1,
             'train_loss': history['train_loss'][epoch],
             'train_accuracy': history['train_acc'][epoch],
-            'val_loss': history['val_loss'][epoch],
-            'val_accuracy': history['val_acc'][epoch]
+            'val_loss': history['val_loss'][epoch] if len(history['val_loss']) > epoch else None,
+            'val_accuracy': val_acc
         }, step=epoch)
+
+    # Make it easy for WandB to pick up the best val accuracy
+    wandb.run.summary["best_val_accuracy"] = best_val_acc
 
     # 6. Evaluate
     print("\n[6/7] Evaluating on test set...")
