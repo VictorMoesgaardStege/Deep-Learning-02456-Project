@@ -20,7 +20,8 @@ class ActivationFunction:
         raise NotImplementedError
     
     @staticmethod
-    def backward(x):
+    def backward(z, a, upstream_grad):
+        #return gradient wrt input z given upstream gradient
         raise NotImplementedError
 
 
@@ -34,8 +35,8 @@ class ReLU(ActivationFunction):
     
     #ReuLU activation function for backward pass (derivative of relu)
     @staticmethod
-    def backward(x):
-        return (x > 0).astype(float) # Derivative is 1 for x>0, else 0 (this is a logical test)
+    def backward(z, a, upstream_grad):
+        return upstream_grad * (z > 0) # Derivative is 1 for x>0, else 0 (this is a logical test)
 
 
 class Sigmoid(ActivationFunction):
@@ -48,9 +49,8 @@ class Sigmoid(ActivationFunction):
         return 1 / (1 + np.exp(-x_clipped))
     
     @staticmethod
-    def backward(x):
-        s = Sigmoid.forward(x)
-        return s * (1 - s)
+    def backward(z, a, upstream_grad):
+        return upstream_grad * a * (1 - a)
 
 
 class Tanh(ActivationFunction):
@@ -61,8 +61,8 @@ class Tanh(ActivationFunction):
         return np.tanh(x)
     
     @staticmethod
-    def backward(x):
-        return 1 - np.tanh(x) ** 2
+    def backward(z, a, upstream_grad):
+        return upstream_grad * (1 - a**2)
     
 class Identity(ActivationFunction):
     """Identity (linear) activation function"""
@@ -73,9 +73,9 @@ class Identity(ActivationFunction):
         return x
 
     @staticmethod
-    def backward(x):
+    def backward(z, a, upstream_grad):
         # Derivative of identity is 1 everywhere
-        return np.ones_like(x)
+        return upstream_grad * np.ones_like(z)
 
 
 class Softmax(ActivationFunction):
@@ -88,10 +88,13 @@ class Softmax(ActivationFunction):
         return exp_x / np.sum(exp_x, axis=1, keepdims=True)
     
     @staticmethod
-    def backward(x):
-        # Actual gradient calculation is done in the NeuralNetwork.backward method
-        # and this is a placeholder that multiplies gradient by 1. 
-        return np.ones_like(x)
+    def backward(z, a, upstream_grad):
+        # a = softmax(z)
+        # upstream_grad = dL/da
+        
+        # Compute Jacobian * upstream_grad
+        dot = np.sum(upstream_grad * a, axis=1, keepdims=True)
+        return a * (upstream_grad - dot)
 
 
 class Layer:
@@ -167,7 +170,8 @@ class Layer:
             Gradient of loss with respect to layer input
         """
         # Gradient through activation 
-        dz = da * self.activation.backward(self.z) # actually dL/dz = dL/da * da/dz
+        dz = self.activation.backward(self.z, self.a, da) # actually dL/dz = dL/da * da/dz
+        
         
         # Gradient with respect to weights and biases
         batch_size = self.input.shape[0]
@@ -208,6 +212,10 @@ class NeuralNetwork:
         if seed is not None:
             np.random.seed(seed)
         
+        # Loss type (set during training)
+        self.loss_type = "cross_entropy"
+        
+        
         self.layer_sizes = layer_sizes
         self.learning_rate = learning_rate
         self.l2_lambda = l2_lambda
@@ -245,6 +253,10 @@ class NeuralNetwork:
         self.val_loss_history = []
         self.val_acc_history = []
 
+        # Adam timestep counter (for bias correction)
+        self.t = 0
+
+
     
     def forward(self, x):
         """
@@ -262,21 +274,37 @@ class NeuralNetwork:
     
     def backward(self, y_pred, y_true):
         """
-        Backward pass through the entire network
-        
+        Backward pass through the entire network.
+
         Args:
-            y_pred: Predicted values of shape (batch_size, output_size)
-            y_true: True values of shape (batch_size, output_size)
+            y_pred: Network output (after final activation), shape (batch, C)
+            y_true: True targets (one-hot), shape (batch, C)
         """
-        # Gradient of loss with respect to output
-        # For softmax + cross-entropy: gradient is simply (y_pred - y_true)
-        da = y_pred - y_true
-        
+
+        loss_type = self.loss_type
+        EPSILON_CLIP = 1e-10
+        MAX_CLIP = 1 - 1e-10
+
+        # Gradient of loss w.r.t. network output (post-activation)
+        if loss_type == "mse":
+            # dL/da = 2 * (a - y)
+            upstream_grad = 2.0 * (y_pred - y_true)
+
+        elif loss_type == "cross_entropy":
+            # L = -sum y * log(a)
+            # dL/da = -y / a  (per sample)
+            y_pred_clipped = np.clip(y_pred, EPSILON_CLIP, MAX_CLIP)
+            upstream_grad = -y_true / y_pred_clipped # when backpropagating through softmax, this simplifies to (a - y)
+        else:
+            raise ValueError(f"Unknown loss type in backward: {loss_type}")
+
+        # Backpropagate through all layers
+        grad = upstream_grad
         # Backpropagate through layers
         for layer in reversed(self.layers):
-            da = layer.backward(da)
+            grad = layer.backward(grad)
     
-    def compute_loss(self, y_pred, y_true, loss_type: str = 'cross_entropy'):
+    def compute_loss(self, y_pred, y_true):
         """
         Compute loss with L2 regularization
         
@@ -293,6 +321,7 @@ class NeuralNetwork:
         MAX_CLIP = 1 - 1e-10  # Maximum value for clipping probabilities
 
         batch_size = y_true.shape[0]
+        loss_type = self.loss_type
         
         if loss_type == 'mse':
             # Mean Squared Error
@@ -314,12 +343,16 @@ class NeuralNetwork:
         
         return data_loss + l2_loss
     
-    def update_weights(self, t):
-        """Update weights and biases using gradients
-           t = number of update steps taken so far (for Adam bias correction)."""
+    def update_weights(self):
+        """Update weights and biases using gradients"""
+
+        # Increment global timestep once per update call
+        self.t += 1
+        t = self.t
+        
         for layer in self.layers:
-            # Add L2 regularization gradient to weight gradients
-            if self.l2_lambda > 0:
+            # Inside update_weights, before optimizer branches:
+            if self.l2_lambda > 0 and self.optimizer != "adam":
                 layer.dweights += self.l2_lambda * layer.weights # 1/m is already included in layer.dweights
 
             if self.optimizer == "sgd":
@@ -354,13 +387,11 @@ class NeuralNetwork:
                 layer.weights -= self.learning_rate * ((1 + beta) * layer.vw - beta * vw_prev)
                 layer.biases  -= self.learning_rate * ((1 + beta) * layer.vb - beta * vb_prev)
 
-
-
             elif self.optimizer == "adam":
                 # Adam optimizer parameters
                 beta = 0.9
                 gamma = 0.999
-                epsilon = 1e-7
+                epsilon = 1e-8
 
                 # Update biased first moment estimate
                 layer.vw = beta * layer.vw + (1 - beta) * layer.dweights
@@ -377,6 +408,11 @@ class NeuralNetwork:
                 # Compute bias-corrected second moment estimate
                 sw_corrected = layer.sw / (1 - gamma ** t)
                 sb_corrected = layer.sb / (1 - gamma ** t)
+
+                # AdamW-style decoupled weight decay (if l2_lambda is used as weight decay)
+                weight_decay = self.l2_lambda
+                if weight_decay > 0.0:
+                    layer.weights -= self.learning_rate * weight_decay * layer.weights
 
                 # Update weights and biases
                 layer.weights -= self.learning_rate * vw_corrected / (np.sqrt(sw_corrected) + epsilon)
@@ -407,10 +443,15 @@ class NeuralNetwork:
         Returns:
             Dictionary with training history
         """
+
+        # Set loss type for this training run
+        self.loss_type = loss_type.lower()
+
         n_samples = X_train.shape[0]
         n_batches = max(1, n_samples // batch_size) # Ensure at least one batch exists (// is floor division)
 
-        t = 1   # Adam timestep counter. Should be changed to 0?
+        # Reset Adam timestep for this training run
+        self.t = 0
         
         for epoch in range(epochs):
             # Shuffle training data
@@ -432,7 +473,7 @@ class NeuralNetwork:
                 y_pred = self.forward(X_batch)
                 
                 # Compute loss
-                batch_loss = self.compute_loss(y_pred, y_batch, loss_type)
+                batch_loss = self.compute_loss(y_pred, y_batch)
                 epoch_loss += batch_loss
                 
                 # Backward pass
@@ -440,8 +481,7 @@ class NeuralNetwork:
                 
 
                 # Update weights using Adam timestep implementation
-                self.update_weights(t)
-                t += 1   # Increment after each batch
+                self.update_weights()
             
             # Average loss. Epoch loss per batch
             avg_loss = epoch_loss / n_batches
@@ -454,7 +494,7 @@ class NeuralNetwork:
             # Validation metrics
             if X_val is not None and y_val is not None:
                 val_pred = self.forward(X_val)
-                val_loss = self.compute_loss(val_pred, y_val, loss_type)
+                val_loss = self.compute_loss(val_pred, y_val)
                 val_acc = self.evaluate(X_val, y_val)
                 self.val_loss_history.append(val_loss)
                 self.val_acc_history.append(val_acc)
