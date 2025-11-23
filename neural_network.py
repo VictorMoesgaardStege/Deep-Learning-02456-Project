@@ -334,9 +334,8 @@ class NeuralNetwork:
         else:
             raise ValueError(f"Unknown loss type: {loss_type}")
         
-        # L2 Regularization
         l2_loss = 0
-        if self.l2_lambda > 0:
+        if self.l2_lambda > 0 and self.optimizer != "adam": # L2 regularization term (not included for Adam optimizer)
             for layer in self.layers:
                 l2_loss += np.sum(layer.weights ** 2)
             l2_loss *= (self.l2_lambda / (2 * batch_size))
