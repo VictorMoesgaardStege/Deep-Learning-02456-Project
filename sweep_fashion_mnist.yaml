@@ -1,0 +1,73 @@
+program: final_pipeline_fashion_mnist.py
+method: bayes
+
+metric:
+  name: val_accuracy
+  goal: maximize
+
+parameters:
+  learning_rate:
+    distribution: log_uniform_values
+    min: 5e-5
+    max: 1e-2
+
+  l2_lambda:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+
+  batch_size:
+    values: [32, 64, 128, 256]
+
+  optimizer:
+    values: ["sgd", "momentum", "nesterov","adam"]
+
+  weights_init:
+    values: ["he", "xavier"]
+
+  # We are testing both Cross-Entropy and MSE
+  loss_type:
+    values: ["cross_entropy", "mse"]
+
+  # Number of hidden layers (between 2 and 6)
+  num_layers:
+    values: [2, 3, 4, 5, 6]
+
+  # Hidden layer sizes (neurons), bit-style sizes up to ~3000 ish.
+  hidden_size_1:
+    values: [128, 256, 512, 1024, 2048, 3072]
+  hidden_size_2:
+    values: [128, 256, 512, 1024, 2048, 3072]
+  hidden_size_3:
+    values: [128, 256, 512, 1024, 2048, 3072]
+  hidden_size_4:
+    values: [128, 256, 512, 1024, 2048, 3072]
+  hidden_size_5:
+    values: [128, 256, 512, 1024, 2048, 3072]
+  hidden_size_6:
+    values: [128, 256, 512, 1024, 2048, 3072]
+
+  # Hidden layer activations where it is possible to pick any combination. So we can try with both clean relu/tanh/identity but also a mix.
+  activation_1:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+  activation_2:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+  activation_3:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+  activation_4:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+  activation_5:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+  activation_6:
+    values: ["relu", "tanh", "identity", "clean_relu", "clean_tanh", "clean_identity"]
+
+  # Output layer activation is always softmax
+  output_activation:
+    value: "softmax"
+
+  seed:
+    value: 42
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
